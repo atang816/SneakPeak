@@ -78,6 +78,8 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
     html = requests.get(url=url, headers=headers)
     output = json.loads(html.text)
 
+    shoe_list = output['Products']
+    # loop and add to shoe_data
     title = output['Products'][0]['title']
     img = output['Products'][0]['media']["imageUrl"]
     retail_price = output['Products'][0]["retailPrice"]
@@ -132,6 +134,7 @@ def run_scrape():
 
     :return:
     """
+    clear_data_from_database() # Everytime this is ran clear db first
     pass
 
 
