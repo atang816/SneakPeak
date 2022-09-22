@@ -3,6 +3,8 @@ import json
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
+import psycopg2
+from config import config
 
 # Searching for a shoe
 def scrape_goat_data_for_jordan_shoe(searched_shoe: str, goat_url: str)-> dict:
@@ -78,13 +80,28 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
     html = requests.get(url=url, headers=headers)
     output = json.loads(html.text)
 
-    shoe_list = output['Products']
-    # loop and add to shoe_data
     title = output['Products'][0]['title']
-    img = output['Products'][0]['media']["imageUrl"]
+    url = "https://stockx.com/" + output['Products'][0]['shortDescription']
+    shoe_model = output['Products'][0]['brand']
+    img = output['Products'][0]['media']["smallImageUrl"]
     retail_price = output['Products'][0]["retailPrice"]
+    size = output['Products'][0]['market']['lowestAskSize']
+    gender = output['Products'][0]["gender"][0]
+    color = output['Products'][0]["colorway"]
+    condition = output['Products'][0]["condition"]
 
-    return title
+    return {
+        "shoe_name": title,
+        "url": url,
+        "shoe_model": shoe_model, # Do we just want the brand?
+        "cost": retail_price, # Which price do we want (retail, lowestAskPrice) # Add more columns for the prices
+        "size": size, # Only able to get lowestAskSize
+        "gender_or_identity": gender,
+        "color": color,
+        "condition": condition,
+        "image": img
+
+    }
 
 def scrape_goat_data_for_specific_shoe(query):
     url = f"https://ac.cnstrc.com/search/{query}?c=ciojs-client-2.29.2&key=key_XT7bjdbvjgECO5d8&i=c471ae65-6195-427f-b9ff-45fa149d2d8c&s=15&num_results_per_page=25&_dt=1661714126100"
@@ -101,6 +118,33 @@ def insert_to_db(shoe: dict):
     :param shoe:
     :return:
     """
+
+    sql = """INSERT INTO shoe_data (shoe_name, url, shoe_model, cost, size, gender_or_identity, color, condition) VALUES(%s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
+    conn = None
+    shoes_id = None
+    try:
+        # read database configuration
+        params = config()
+        # connect to the PostgreSQL database
+        conn = psycopg2.connect(**params)
+        # create a new cursor
+        cur = conn.cursor()
+        # execute the INSERT statement
+        cur.execute(sql, (shoe["shoe_name"], shoe["url"], shoe["shoe_model"], shoe["cost"], shoe["size"], shoe["gender_or_identity"], shoe["color"], shoe["condition"]))
+        # get the generated id back
+        shoes_id = cur.fetchone()[0]
+        # commit the changes to the database
+        conn.commit()
+        # close communication with the database
+        cur.close()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+    return shoes_id
+
     pass
 
 def _convert_string_date_to_datetime(date: str) -> datetime:
@@ -134,15 +178,23 @@ def run_scrape():
 
     :return:
     """
-    clear_data_from_database() # Everytime this is ran clear db first
     pass
 
 
 
 if __name__ == '__main__':
+
+    # Scrape brand of shoes on goat website
     #scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
+
+    # Scrape from nike website
     #scrape_nike_data_for_specific_shoe("Air Jordan 12 Retro", "https://www.nike.com/w/mens-jordan-shoes-37eefznik1zy7ok")
-    print(scrape_stockx_data_for_specific_shoe("Air Jordan 12 Retro"))
+
+    # Scrape from stockx website
+    print(scrape_stockx_data_for_specific_shoe("Air Jordan Dunks"))
+    insert_to_db(scrape_stockx_data_for_specific_shoe("Air Jordan Dunks"))
+    print("Finished")
+    # Scrape a shoe from goat website
     #print(scrape_goat_data_for_specific_shoe("Air Jordan 3 Retro 'Dark Iris'"))
     #scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
 
