@@ -3,9 +3,12 @@ import json
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
+import psycopg2
+from config import config
+
 
 # Searching for a shoe
-def scrape_goat_data_for_jordan_shoe(searched_shoe: str, goat_url: str)-> dict:
+def scrape_goat_data_for_jordan_shoe(searched_shoe: str, goat_url: str) -> dict:
     # {
     #     'air jordan 1 military black': {
     #      'size_chart': {'10.5': 300,
@@ -38,8 +41,8 @@ def scrape_goat_data_for_jordan_shoe(searched_shoe: str, goat_url: str)-> dict:
 
     pass
 
-def scrape_nike_data_for_specific_shoe(searched_shoe: str, nike_url: str):
 
+def scrape_nike_data_for_specific_shoe(searched_shoe: str, nike_url: str):
     result = requests.get(nike_url)
     soup = BeautifulSoup(result.content, "lxml")
     shoes_names = soup.find_all('div', class_='product-card__title')
@@ -55,8 +58,8 @@ def scrape_nike_data_for_specific_shoe(searched_shoe: str, nike_url: str):
 
     pass
 
-def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
 
+def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
     url = f'https://stockx.com/api/browse?_search={searched_shoe}'
 
     headers = {
@@ -77,14 +80,48 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
 
     html = requests.get(url=url, headers=headers)
     output = json.loads(html.text)
-
     shoe_list = output['Products']
-    # loop and add to shoe_data
-    title = output['Products'][0]['title']
-    img = output['Products'][0]['media']["imageUrl"]
-    retail_price = output['Products'][0]["retailPrice"]
 
-    return title
+    for shoe in shoe_list:
+        shoe_dict = dict(
+            shoe_name=searched_shoe,
+            url=url,
+            description=shoe['shortDescription'],
+            brand=shoe['brand'],
+            gender=shoe['gender'],
+            color_way=shoe['colorway'],
+            condition=shoe['condition'],
+            retail=shoe['retailPrice'],
+            lowest_asked=shoe['market']['lowestAsk'],
+            annual_high=shoe['market']['annualHigh'],
+            annual_low=shoe['market']['annualLow'],
+            deadstock_range_high=shoe['market']['deadstockRangeHigh'],
+            deadstock_range_low=shoe['market']['deadstockRangeLow']
+        )
+        insert_to_db(shoe_dict)
+
+    # title = output['Products'][0]['title']
+    # url = "https://stockx.com/" + output['Products'][0]['shortDescription']
+    # shoe_model = output['Products'][0]['brand']
+    # img = output['Products'][0]['media']["smallImageUrl"]
+    # retail_price = output['Products'][0]["retailPrice"]
+    # size = output['Products'][0]['market']['lowestAskSize']
+    # gender = output['Products'][0]["gender"][0]
+    # color = output['Products'][0]["colorway"]
+    # condition = output['Products'][0]["condition"]
+    #
+    # return {
+    #     "shoe_name": searched_shoe,
+    #     "url": url,
+    #     "shoe_model": shoe_model,  # Do we just want the brand?
+    #     "cost": retail_price,  # Which price do we want (retail, lowestAskPrice) # Add more columns for the prices
+    #     "size": size,  # Only able to get lowestAskSize
+    #     "gender_or_identity": gender,
+    #     "color": color,
+    #     "condition": condition,
+    #     "image": img
+    # }
+
 
 def scrape_goat_data_for_specific_shoe(query):
     url = f"https://ac.cnstrc.com/search/{query}?c=ciojs-client-2.29.2&key=key_XT7bjdbvjgECO5d8&i=c471ae65-6195-427f-b9ff-45fa149d2d8c&s=15&num_results_per_page=25&_dt=1661714126100"
@@ -94,26 +131,43 @@ def scrape_goat_data_for_specific_shoe(query):
 
     return output['response']['results'][0]
 
+
 # connect to db and insert data
 def insert_to_db(shoe: dict):
     """
-
     :param shoe:
     :return:
     """
-    pass
-
-def _convert_string_date_to_datetime(date: str) -> datetime:
-    """ Converts string date to datetime format
-
-    :param date:
-    :return:
-    """
-    pass
+    sql = """INSERT INTO shoe_data (shoe_name, url, description, brand, gender, color_way, condition, retail, lowest_asked, annual_high,
+    annual_low, deadstock_range_high, deadstock_range_low) 
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
+    conn = None
+    shoes_id = None
+    try:
+        # read database configuration
+        params = config()
+        # connect to the PostgreSQL database
+        conn = psycopg2.connect(**params)
+        # create a new cursor
+        cur = conn.cursor()
+        # execute the INSERT statement
+        execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'], shoe['description'], shoe['brand'], shoe['gender'],
+                                    shoe['color_way'], shoe['condition'], shoe['retail'], shoe['lowest_asked'],
+                                    shoe['annual_high'], shoe['annual_low'], shoe['deadstock_range_high'],
+                                    shoe['deadstock_range_low']))
+        # commit the changes to the database
+        conn.commit()
+        # close communication with the database
+        cur.close()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 # ADRIAN PART
-def _get_all_shoes_and_info(name: str) -> dict:
+def _get_all_shoe_names() -> list:
     """ connect to db to fetch goat specific url
 
     ex: select goat_url from sp_shoe where shoe_name = ''
@@ -122,6 +176,7 @@ def _get_all_shoes_and_info(name: str) -> dict:
     """
     pass
 
+
 def clear_data_from_database():
     """ This clears data from sp_shoe_data, to clear any redundant data and fetch new data.
 
@@ -129,20 +184,32 @@ def clear_data_from_database():
     """
     pass
 
+
 def run_scrape():
     """
 
     :return:
     """
-    clear_data_from_database() # Everytime this is ran clear db first
+    clear_data_from_database()
+
+    shoe_query_list = _get_all_shoe_names()
+    for shoe in shoe_query_list:
+        scrape_stockx_data_for_specific_shoe(shoe)
+
     pass
 
 
-
 if __name__ == '__main__':
-    #scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
-    #scrape_nike_data_for_specific_shoe("Air Jordan 12 Retro", "https://www.nike.com/w/mens-jordan-shoes-37eefznik1zy7ok")
-    print(scrape_stockx_data_for_specific_shoe("Air Jordan 12 Retro"))
-    #print(scrape_goat_data_for_specific_shoe("Air Jordan 3 Retro 'Dark Iris'"))
-    #scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
+    # Scrape brand of shoes on goat website
+    # scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
 
+    # Scrape from nike website
+    # scrape_nike_data_for_specific_shoe("Air Jordan 12 Retro", "https://www.nike.com/w/mens-jordan-shoes-37eefznik1zy7ok")
+
+    # Scrape from stockx website
+    scrape_stockx_data_for_specific_shoe("Jordan 3 Retro White Cement '88 Dunk Contest (2013)")
+    # insert_to_db(scrape_stockx_data_for_specific_shoe("Air Jordan Dunks"))
+    print("Finished")
+    # Scrape a shoe from goat website
+    # print(scrape_goat_data_for_specific_shoe("Air Jordan 3 Retro 'Dark Iris'"))
+    # scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
