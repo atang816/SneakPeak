@@ -109,7 +109,9 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
             annual_low=shoe['market']['annualLow'],
             deadstock_range_high=shoe['market']['deadstockRangeHigh'],
             deadstock_range_low=shoe['market']['deadstockRangeLow'],
-            shoe_image_url=shoe["media"]["imageUrl"]
+            shoe_image_url=shoe["media"]["imageUrl"],
+            last_sale=shoe['market']['lastSale'],
+            last_sale_date=shoe['market']['lastSaleDate']
         )
         insert_to_db(shoe_dict)
 
@@ -130,8 +132,8 @@ def insert_to_db(shoe: dict):
     :return:
     """
     sql = """INSERT INTO shoe_data (shoe_name, url, description, brand, gender, color_way, condition, retail, lowest_asked, annual_high,
-    annual_low, deadstock_range_high, deadstock_range_low) 
-    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
+    annual_low, deadstock_range_high, deadstock_range_low, last_sale, last_sale_date) 
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
     sql_2 = """ UPDATE sp_shoe SET image=%s, url=%s WHERE shoe_name=%s
     """
     conn = None
@@ -147,7 +149,7 @@ def insert_to_db(shoe: dict):
         execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'], shoe['description'], shoe['brand'], shoe['gender'],
                                     shoe['color_way'], shoe['condition'], shoe['retail'], shoe['lowest_asked'],
                                     shoe['annual_high'], shoe['annual_low'], shoe['deadstock_range_high'],
-                                    shoe['deadstock_range_low']))
+                                    shoe['deadstock_range_low'], shoe['last_sale'], shoe['last_sale_date']))
         # execute UPDATE
         base64_image = base64.b64encode(requests.get(shoe['shoe_image_url']).content)
         execute_2 = cur.execute(sql_2, (base64_image, shoe['url'], shoe['shoe_name']))
@@ -213,8 +215,8 @@ def run_scrape():
     # clear_data_from_database()
     shoe_query_list = _get_all_shoe_names()
     for shoe in shoe_query_list:
-        time.sleep(60)
         scrape_stockx_data_for_specific_shoe(shoe)
+        time.sleep(60)
 
 
 if __name__ == '__main__':
