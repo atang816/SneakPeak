@@ -121,8 +121,24 @@ def scrape_goat_data_for_specific_shoe(query):
 
     html = requests.get(url=url)
     output = json.loads(html.text)
+    shoe_list = output['response']['results']
+    for shoe in shoe_list:
+        if shoe['data']['category'] != 'shoes':
+            continue
 
-    return output['response']['results'][0]
+        shoe_dict = dict(
+            shoe_name=query,
+            url=shoe['data']['image_url'] if 'image_url' in shoe else None,
+            description=shoe['value'].replace("'", ''),
+            color_way=shoe['data']['color'],
+            condition=shoe['data']['product_condition'] if 'product_condition' in shoe else None,
+            retail=float(shoe['data']['retail_price_cents']) / 100,
+            lowest_price=(float(shoe['data']['lowest_price_cents']) / 100) if 'lowest_price_cents' in shoe else None
+
+        )
+
+        scrape_goat_data_by_size(shoe['data']['slug'], shoe_dict)
+        insert_goat_data_to_db(shoe_dict)
 
 
 # SEARCHING FOR SHOE SIZES ON GOAT
