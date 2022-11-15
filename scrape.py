@@ -125,6 +125,55 @@ def scrape_goat_data_for_specific_shoe(query):
     return output['response']['results'][0]
 
 
+# SEARCHING FOR SHOE SIZES ON GOAT
+def scrape_goat_data_by_size(shoe_slug, shoe_dict) -> dict:
+    # f'https://www.goat.com/_next/data/Jvg3JY7OdL44a31avkLy_/en-us/sneakers/{shoe_slug}.json?pageSlug=sneakers&productSlug={shoe_slug}'
+
+    # CAUTION: Make sure this url is the same found in developer tools
+    # May have to clear cookies to get the url
+    url = f'https://www.goat.com/_next/data/P4Gg0MUhpP5zO2S1a_r3-/en-us/sneakers/{shoe_slug}.json?pageSlug=sneakers&productSlug={shoe_slug}'
+
+    result = requests.get(url)
+    output = json.loads(result.text)
+    offers = output['pageProps']['offers']['offerData']
+
+    size_prices = {offers[i]['size'] : offers[i]['price'] for i in range(len(offers))}
+    shoe_dict.update({'size_prices': size_prices})
+    return shoe_dict
+
+# connect to db and insert data
+def insert_goat_data_to_db(shoe: dict):
+    """
+    :param shoe:
+    :return:
+    """
+    sql = """INSERT INTO shoe_data_goat (shoe_name, url, retail, lowest_asked) 
+    VALUES(%s, %s, %s, %s) RETURNING data_instance_id;"""
+    conn = None
+    try:
+        # read database configuration
+        params = config()
+        # connect to the PostgreSQL database
+        conn = psycopg2.connect(**params)
+        # create a new cursor
+        cur = conn.cursor()
+        # execute the INSERT statement
+        execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'],
+                                    shoe['retail'], shoe['lowest_price']))
+        print('Here')
+        # commit the changes to the database
+        conn.commit()
+        # close communication with the database
+        cur.close()
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+    return True
+
+
 # connect to db and insert data
 def insert_to_db(shoe: dict):
     """
