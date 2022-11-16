@@ -128,13 +128,13 @@ def scrape_goat_data_for_specific_shoe(query):
 
         shoe_dict = dict(
             shoe_name=query,
-            url=shoe['data']['image_url'] if 'image_url' in shoe else None,
+            url=shoe['data']['image_url'],
             description=shoe['value'].replace("'", ''),
             color_way=shoe['data']['color'],
-            condition=shoe['data']['product_condition'] if 'product_condition' in shoe else None,
+            condition=shoe['data']['product_condition'],
             retail=float(shoe['data']['retail_price_cents']) / 100,
-            lowest_price=(float(shoe['data']['lowest_price_cents']) / 100) if 'lowest_price_cents' in shoe else None
-
+            lowest_price=(float(shoe['data']['lowest_price_cents']) / 100),
+            redirect_url=f'goat.com/sneakers/{shoe["data"]["slug"]}'
         )
 
         scrape_goat_data_by_size(shoe['data']['slug'], shoe_dict)
@@ -147,13 +147,13 @@ def scrape_goat_data_by_size(shoe_slug, shoe_dict) -> dict:
 
     # CAUTION: Make sure this url is the same found in developer tools
     # May have to clear cookies to get the url
-    url = f'https://www.goat.com/_next/data/P4Gg0MUhpP5zO2S1a_r3-/en-us/sneakers/{shoe_slug}.json?pageSlug=sneakers&productSlug={shoe_slug}'
+    url = f'https://www.goat.com/_next/data/A2btdOVixyBfdMc5h7uVz/en-us/sneakers/{shoe_slug}.json?pageSlug=sneakers&productSlug={shoe_slug}'
 
     result = requests.get(url)
     output = json.loads(result.text)
     offers = output['pageProps']['offers']['offerData']
 
-    size_prices = {offers[i]['size'] : offers[i]['price'] for i in range(len(offers))}
+    size_prices = {float(offers[i]['size']) : float(offers[i]['price']) for i in range(len(offers))}
     shoe_dict.update({'size_prices': size_prices})
     return shoe_dict
 
@@ -163,8 +163,9 @@ def insert_goat_data_to_db(shoe: dict):
     :param shoe:
     :return:
     """
-    sql = """INSERT INTO shoe_data_goat (shoe_name, url, retail, lowest_asked) 
-    VALUES(%s, %s, %s, %s) RETURNING data_instance_id;"""
+    sql = """INSERT INTO shoe_data_goat (shoe_name, description, url, retail, lowest_asked, size, size_price, redirect_url,
+    condition, color_way) 
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
     conn = None
     try:
         # read database configuration
@@ -174,9 +175,12 @@ def insert_goat_data_to_db(shoe: dict):
         # create a new cursor
         cur = conn.cursor()
         # execute the INSERT statement
-        execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'],
-                                    shoe['retail'], shoe['lowest_price']))
-        print('Here')
+        for shoe_size in shoe['size_prices']:
+            execute = cur.execute(sql, (shoe['shoe_name'], shoe['description'], shoe['url'],
+                                        shoe['retail'], shoe['lowest_price'],
+                                        shoe_size, shoe['size_prices'][shoe_size], shoe['redirect_url'],
+                                        shoe['condition'], shoe['color_way']))
+
         # commit the changes to the database
         conn.commit()
         # close communication with the database
@@ -281,6 +285,7 @@ def run_scrape():
     shoe_query_list = _get_all_shoe_names()
     for shoe in shoe_query_list:
         scrape_stockx_data_for_specific_shoe(shoe)
+        scrape_goat_data_for_specific_shoe(shoe)
         time.sleep(60)
 
 
@@ -295,7 +300,7 @@ if __name__ == '__main__':
     # this = _get_all_shoe_names()
     # scrape_stockx_data_for_specific_shoe("Adidas Yeezy Foam RNR Onyx")
     # insert_to_db(scrape_stockx_data_for_specific_shoe("Air Jordan Dunks"))
-    print("Finished")
     # Scrape a shoe from goat website
     # print(scrape_goat_data_for_specific_shoe("Air Jordan 3 Retro 'Dark Iris'"))
     # scrape_goat_data_for_jordan_shoe("Air Jordan 3 Retro 'Dark Iris'", "https://www.goat.com/brand/air-jordan")
+    print("Finished")
