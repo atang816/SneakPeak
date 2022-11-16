@@ -131,9 +131,9 @@ def scrape_goat_data_for_specific_shoe(query):
             url=shoe['data']['image_url'],
             description=shoe['value'].replace("'", ''),
             color_way=shoe['data']['color'],
-            condition=shoe['data']['product_condition'],
+            condition=shoe['data']['product_condition'] if 'product_condition' in shoe['data'] else None,
             retail=float(shoe['data']['retail_price_cents']) / 100,
-            lowest_price=(float(shoe['data']['lowest_price_cents']) / 100),
+            lowest_price=(float(shoe['data']['lowest_price_cents']) / 100) if 'lowest_price_cents' in shoe['data'] else None,
             redirect_url=f'goat.com/sneakers/{shoe["data"]["slug"]}'
         )
 
