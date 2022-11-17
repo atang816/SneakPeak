@@ -97,7 +97,7 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
     for shoe in shoe_list:
         shoe_dict = dict(
             shoe_name=searched_shoe,
-            url=url,
+            url=shoe['media']['imageUrl'],
             description=shoe['shortDescription'],
             brand=shoe['brand'],
             gender=shoe['gender'],
@@ -111,7 +111,9 @@ def scrape_stockx_data_for_specific_shoe(searched_shoe: str):
             deadstock_range_low=shoe['market']['deadstockRangeLow'],
             shoe_image_url=shoe["media"]["imageUrl"],
             last_sale=shoe['market']['lastSale'],
-            last_sale_date=shoe['market']['lastSaleDate']
+            last_sale_date=shoe['market']['lastSaleDate'],
+            redirect_url=f'stockx.com/{shoe["urlKey"]}'
+
         )
         insert_to_db(shoe_dict)
 
@@ -200,9 +202,9 @@ def insert_to_db(shoe: dict):
     :param shoe:
     :return:
     """
-    sql = """INSERT INTO shoe_data (shoe_name, url, description, brand, gender, color_way, condition, retail, lowest_asked, annual_high,
+    sql = """INSERT INTO shoe_data (shoe_name, url, redirect_url, description, brand, gender, color_way, condition, retail, lowest_asked, annual_high,
     annual_low, deadstock_range_high, deadstock_range_low, last_sale, last_sale_date) 
-    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING data_instance_id;"""
     sql_2 = """ UPDATE sp_shoe SET image=%s, url=%s WHERE shoe_name=%s
     """
     conn = None
@@ -215,7 +217,7 @@ def insert_to_db(shoe: dict):
         # create a new cursor
         cur = conn.cursor()
         # execute the INSERT statement
-        execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'], shoe['description'], shoe['brand'], shoe['gender'],
+        execute = cur.execute(sql, (shoe['shoe_name'], shoe['url'],shoe['redirect_url'], shoe['description'], shoe['brand'], shoe['gender'],
                                     shoe['color_way'], shoe['condition'], shoe['retail'], shoe['lowest_asked'],
                                     shoe['annual_high'], shoe['annual_low'], shoe['deadstock_range_high'],
                                     shoe['deadstock_range_low'], shoe['last_sale'], shoe['last_sale_date']))
